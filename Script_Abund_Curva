@@ -11,7 +11,6 @@
 # D:/Programas/Mapas_QGIS/Isadora/Relatorio
 # ============================================================
 
-suppressPackageStartupMessages({
     library(readr)
     library(dplyr)
     library(tidyr)
@@ -20,7 +19,6 @@ suppressPackageStartupMessages({
     library(vegan)
     library(ggplot2)
     library(scales)
-})
 
 # ------------------------------------------------------------
 # 0) Diretório de saída (sem acento = mais robusto no Windows)
