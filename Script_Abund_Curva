@@ -144,10 +144,12 @@ div_metrics <- function(mat){
 }
 
 div_form <- div_metrics(select(abund_form,-Formacao)) %>%
-  mutate(Grupo=abund_form$Formacao)
+  mutate(Grupo=abund_form$Formacao) %>%
+  select(Grupo, Shannon, Simpson)
 
 div_geral <- div_metrics(abund_geral) %>%
-  mutate(Grupo="Geral")
+  mutate(Grupo="Geral") %>%
+  select(Grupo, Shannon, Simpson)
 
 div_all <- bind_rows(div_geral,div_form)
 write_csv(div_all,file.path(output_dir,"Indices_Biodiversidade.csv"))
@@ -162,13 +164,52 @@ pa_form[,-1] <- (pa_form[,-1]>0)*1
 sim_jacc <- 1-as.matrix(vegdist(select(pa_form,-Formacao),
                                 method="jaccard",binary=TRUE))
 rownames(sim_jacc) <- pa_form$Formacao
+colnames(sim_jacc) <- pa_form$Formacao
 
 sim_bray <- 1-as.matrix(vegdist(select(abund_form,-Formacao),
                                 method="bray"))
 rownames(sim_bray) <- abund_form$Formacao
+colnames(sim_bray) <- abund_form$Formacao
 
 write.csv(sim_jacc,file.path(output_dir,"Similaridade_Jaccard.csv"))
 write.csv(sim_bray,file.path(output_dir,"Similaridade_BrayCurtis.csv"))
+
+# ============================================================
+# PARTE E — SALVAR ÍNDICES E SIMILARIDADES COMO IMAGEM (PNG)
+# ============================================================
+
+# E1) Índices (tabela)
+div_img <- div_all %>%
+  mutate(
+    Shannon = round(Shannon, 4),
+    Simpson = round(Simpson, 4)
+  )
+
+png(filename = file.path(output_dir, "Tabela_Indices_Biodiversidade.png"),
+    width = 1800, height = 900, res = 300)
+grid.newpage()
+gridExtra::grid.table(div_img)
+dev.off()
+
+# E2) Similaridade Jaccard (tabela)
+sim_jacc_df <- as.data.frame(round(sim_jacc, 4))
+sim_jacc_df <- cbind(Formacao = rownames(sim_jacc_df), sim_jacc_df)
+
+png(filename = file.path(output_dir, "Tabela_Similaridade_Jaccard.png"),
+    width = 2000, height = 1200, res = 300)
+grid.newpage()
+gridExtra::grid.table(sim_jacc_df)
+dev.off()
+
+# E3) Similaridade Bray-Curtis (tabela)
+sim_bray_df <- as.data.frame(round(sim_bray, 4))
+sim_bray_df <- cbind(Formacao = rownames(sim_bray_df), sim_bray_df)
+
+png(filename = file.path(output_dir, "Tabela_Similaridade_BrayCurtis.png"),
+    width = 2000, height = 1200, res = 300)
+grid.newpage()
+gridExtra::grid.table(sim_bray_df)
+dev.off()
 
 # ============================================================
 # PARTE D — HISTOGRAMA (ESPÉCIES EM ITÁLICO)
@@ -207,7 +248,7 @@ p_hist <- ggplot(plot_df,
     axis.text.x=element_text(angle=60,
                              hjust=1,
                              vjust=1,
-                             face="italic"),   # <- ITÁLICO AQUI
+                             face="italic"),
     plot.title=element_text(hjust=0.5)
   )
 
@@ -221,8 +262,19 @@ ggsave(file.path(output_dir,
 
 message("✔ Relatório TESTE7 finalizado.")
 message("Arquivos salvos em: ", output_dir)
+message(" - Tabela_Indices_Biodiversidade.png")
+message(" - Tabela_Similaridade_Jaccard.png")
+message(" - Tabela_Similaridade_BrayCurtis.png")
 
 
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
+##### CURVA DO COLETOR COM ESTIMATES NO R
 ##### CURVA DO COLETOR COM ESTIMATES NO R
 # ============================================================
 # Curvas do Coletor (EstimateS) – 4 curvas a partir de CSVs
@@ -345,7 +397,7 @@ path_veg3  <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamífero
 # -----------------------------
 # 4) Ler curvas
 # -----------------------------
-curva_geral <- read_estimates_curve(path_geral, "Geral")
+curva_geral <- read_estimates_curve(path_geral, "Fazenda Bananal")
 curva_alt   <- read_estimates_curve(path_veg1,  "Floresta alterada")
 curva_agro  <- read_estimates_curve(path_veg2,  "Agrofloresta")
 curva_mad   <- read_estimates_curve(path_veg3,  "Floresta madura")
@@ -359,13 +411,13 @@ write_csv(curvas_all, file.path(output_dir, "Curvas_EstimateS_4grupos.csv"))
 # 5) Plot (base R) com faixas ±1 SD
 # -----------------------------
 cols <- c(
-    "Geral" = "black",
+    "Fazenda Bananal" = "black",
     "Agrofloresta" = "forestgreen",
     "Floresta alterada" = "orange3",
     "Floresta madura" = "blue3"
 )
 
-groups <- c("Geral", "Agrofloresta", "Floresta alterada", "Floresta madura")
+groups <- c("Fazenda Bananal", "Agrofloresta", "Floresta alterada", "Floresta madura")
 
 xmax <- max(curvas_all$dia, na.rm = TRUE)
 ymax <- max(curvas_all$high, na.rm = TRUE)
@@ -375,9 +427,9 @@ out_pdf <- file.path(output_dir, "Curvas_Coletor_EstimateS_4grupos.pdf")
 
 draw_plot <- function() {
     plot(NA, xlim = c(1, xmax), ylim = c(0, ymax),
-         xlab = "Amostras acumuladas (Samples)",
+         xlab = "Dias de Amostragem",
          ylab = "Riqueza acumulada",
-         main = "Curvas do Coletor (EstimateS: S Mean (runs) ± 1 SD)")
+         main = "Curva do coletor para a Fazenda Bananal e suas Fitofisionomias")
     
     for (g in groups) {
         df <- curvas_all %>% filter(grupo == g)
