@@ -221,3 +221,202 @@ ggsave(file.path(output_dir,
 
 message("✔ Relatório TESTE7 finalizado.")
 message("Arquivos salvos em: ", output_dir)
+
+
+##### CURVA DO COLETOR COM ESTIMATES NO R
+# ============================================================
+# Curvas do Coletor (EstimateS) – 4 curvas a partir de CSVs
+#  - Geral (Tabela e Gráfico)
+#  - Veg1 = Floresta alterada
+#  - Veg2 = Agrofloresta
+#  - Veg3 = Floresta madura
+# Salva PNG + PDF + CSV no output_dir
+# ============================================================
+
+suppressPackageStartupMessages({
+    library(readr)
+    library(dplyr)
+    library(stringr)
+})
+
+# -----------------------------
+# 0) Saída
+# -----------------------------
+output_dir <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Relatorio/Teste7"
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+# -----------------------------
+# 1) Função de conversão robusta (. ou , como decimal)
+# -----------------------------
+to_num_robust <- function(x) {
+    x <- as.character(x)
+    x <- stringr::str_trim(x)
+    x <- gsub("\u00A0", "", x)  # NBSP
+    x <- gsub(" ", "", x)
+    x[x == ""] <- NA
+    
+    both <- grepl(",", x) & grepl("\\.", x)
+    out <- rep(NA_real_, length(x))
+    
+    if (any(both, na.rm = TRUE)) {
+        xb <- x[both]
+        last_comma <- regexpr(",[^,]*$", xb)
+        last_dot   <- regexpr("\\.[^.]*$", xb)
+        dec_is_comma <- last_comma > last_dot
+        
+        xb1 <- xb
+        xb1[dec_is_comma] <- gsub("\\.", "", xb1[dec_is_comma])
+        xb1[dec_is_comma] <- gsub(",", ".", xb1[dec_is_comma])
+        xb1[!dec_is_comma] <- gsub(",", "", xb1[!dec_is_comma])
+        
+        out[both] <- suppressWarnings(as.numeric(xb1))
+    }
+    
+    only_comma <- !both & grepl(",", x)
+    if (any(only_comma, na.rm = TRUE)) {
+        xc <- gsub("\\.", "", x[only_comma])
+        xc <- gsub(",", ".", xc)
+        out[only_comma] <- suppressWarnings(as.numeric(xc))
+    }
+    
+    only_dot <- !both & !only_comma & grepl("\\.", x)
+    if (any(only_dot, na.rm = TRUE)) {
+        xd <- gsub(",", "", x[only_dot])
+        out[only_dot] <- suppressWarnings(as.numeric(xd))
+    }
+    
+    plain <- !both & !only_comma & !only_dot
+    if (any(plain, na.rm = TRUE)) {
+        out[plain] <- suppressWarnings(as.numeric(x[plain]))
+    }
+    
+    out
+}
+
+# -----------------------------
+# 2) Ler uma tabela EstimateS e devolver curva padronizada
+# -----------------------------
+read_estimates_curve <- function(path, grupo) {
+    df_raw <- readr::read_csv(
+        path,
+        show_col_types = FALSE,
+        col_types = readr::cols(.default = readr::col_character())
+    )
+    
+    need <- c("Samples", "S Mean (runs)", "S(est) SD")
+    miss <- setdiff(need, names(df_raw))
+    if (length(miss) > 0) {
+        stop("No arquivo: ", path, "\nFaltam colunas: ", paste(miss, collapse = ", "),
+             "\nColunas disponíveis:\n- ", paste(names(df_raw), collapse = "\n- "))
+    }
+    
+    df <- df_raw %>%
+        transmute(
+            dia      = to_num_robust(`Samples`),
+            mean_run = to_num_robust(`S Mean (runs)`),
+            sd_est   = to_num_robust(`S(est) SD`)
+        ) %>%
+        filter(is.finite(dia), is.finite(mean_run), is.finite(sd_est)) %>%
+        arrange(dia) %>%
+        mutate(
+            low  = pmax(0, mean_run - sd_est),  # ±1 SD
+            high = mean_run + sd_est,
+            grupo = grupo
+        )
+    
+    # sanity check (se >50 é sinal de parse errado)
+    if (max(df$mean_run, na.rm = TRUE) > 50) {
+        warning("ATENÇÃO: curva ", grupo, " com valores muito altos (>50). Verifique decimais no arquivo: ", path)
+    }
+    df
+}
+
+# -----------------------------
+# 3) Caminhos (os seus)
+# -----------------------------
+path_geral <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Tabela e Gráfico.csv"
+
+# conforme você especificou:
+# 1- Floresta Alterada, 2- Agrofloresta, 3- Floresta Madura
+path_veg1  <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Tabela Veg1.csv"
+path_veg2  <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Tabela Veg2.csv"
+path_veg3  <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Tabela Veg3.csv"
+
+# -----------------------------
+# 4) Ler curvas
+# -----------------------------
+curva_geral <- read_estimates_curve(path_geral, "Geral")
+curva_alt   <- read_estimates_curve(path_veg1,  "Floresta alterada")
+curva_agro  <- read_estimates_curve(path_veg2,  "Agrofloresta")
+curva_mad   <- read_estimates_curve(path_veg3,  "Floresta madura")
+
+curvas_all <- bind_rows(curva_geral, curva_agro, curva_alt, curva_mad)
+
+# salvar tabela geral de curvas
+write_csv(curvas_all, file.path(output_dir, "Curvas_EstimateS_4grupos.csv"))
+
+# -----------------------------
+# 5) Plot (base R) com faixas ±1 SD
+# -----------------------------
+cols <- c(
+    "Geral" = "black",
+    "Agrofloresta" = "forestgreen",
+    "Floresta alterada" = "orange3",
+    "Floresta madura" = "blue3"
+)
+
+groups <- c("Geral", "Agrofloresta", "Floresta alterada", "Floresta madura")
+
+xmax <- max(curvas_all$dia, na.rm = TRUE)
+ymax <- max(curvas_all$high, na.rm = TRUE)
+
+out_png <- file.path(output_dir, "Curvas_Coletor_EstimateS_4grupos.png")
+out_pdf <- file.path(output_dir, "Curvas_Coletor_EstimateS_4grupos.pdf")
+
+draw_plot <- function() {
+    plot(NA, xlim = c(1, xmax), ylim = c(0, ymax),
+         xlab = "Amostras acumuladas (Samples)",
+         ylab = "Riqueza acumulada",
+         main = "Curvas do Coletor (EstimateS: S Mean (runs) ± 1 SD)")
+    
+    for (g in groups) {
+        df <- curvas_all %>% filter(grupo == g)
+        if (nrow(df) == 0) next
+        
+        polygon(
+            c(df$dia, rev(df$dia)),
+            c(df$low, rev(df$high)),
+            col = adjustcolor(cols[g], alpha.f = 0.18),
+            border = NA
+        )
+        lines(df$dia, df$mean_run, col = cols[g], lwd = 3)
+    }
+    
+    legend("topleft", legend = groups, col = cols[groups], lwd = 3, bty = "n")
+}
+
+# PNG (ragg -> fallback cairo)
+ok <- FALSE
+tryCatch({
+    if (!requireNamespace("ragg", quietly = TRUE)) install.packages("ragg")
+    ragg::agg_png(filename = out_png, width = 2400, height = 1800, res = 300)
+    draw_plot()
+    dev.off()
+    ok <- TRUE
+}, error = function(e) message("Falhou ragg::agg_png(): ", conditionMessage(e)))
+
+if (!ok) {
+    png(filename = out_png, width = 2400, height = 1800, res = 300, type = "cairo")
+    draw_plot()
+    dev.off()
+}
+
+pdf(out_pdf, width = 10, height = 7)
+draw_plot()
+dev.off()
+
+message("✅ Curvas (4 grupos) salvas em: ", output_dir)
+message(" - ", out_png)
+message(" - ", out_pdf)
+message(" - ", file.path(output_dir, "Curvas_EstimateS_4grupos.csv"))
+
