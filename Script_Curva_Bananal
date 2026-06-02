@@ -205,6 +205,77 @@ draw_collector_curve()
 dev.off()
 
 # ------------------------------------------------------------
+# 6.1) Gráfico da curva do coletor — apenas Fazenda Bananal
+# ------------------------------------------------------------
+
+curva_fazenda <- curvas %>%
+  filter(Grupo == "Fazenda Bananal")
+
+if (nrow(curva_fazenda) == 0) {
+  stop("Não foi encontrada a curva geral da Fazenda Bananal no objeto 'curvas'.")
+}
+
+xmax_fazenda <- max(curva_fazenda$dia, na.rm = TRUE)
+ymax_fazenda <- max(curva_fazenda$limite_sup, na.rm = TRUE)
+
+draw_collector_curve_fazenda <- function() {
+  plot(
+    NA,
+    xlim = c(1, xmax_fazenda),
+    ylim = c(0, ymax_fazenda),
+    xlab = "Dias de amostragem acumulados",
+    ylab = "Riqueza acumulada de espécies",
+    main = "Curva do coletor – Fazenda Bananal"
+  )
+  
+  polygon(
+    c(curva_fazenda$dia, rev(curva_fazenda$dia)),
+    c(curva_fazenda$limite_inf, rev(curva_fazenda$limite_sup)),
+    col = adjustcolor("black", alpha.f = 0.18),
+    border = NA
+  )
+  
+  lines(
+    curva_fazenda$dia,
+    curva_fazenda$riqueza_media,
+    col = "black",
+    lwd = 3
+  )
+  
+  points(
+    curva_fazenda$dia,
+    curva_fazenda$riqueza_media,
+    col = "black",
+    pch = 16,
+    cex = 0.9
+  )
+  
+  legend(
+    "bottomright",
+    legend = "Fazenda Bananal",
+    col = "black",
+    lwd = 3,
+    pch = 16,
+    bty = "n"
+  )
+}
+
+png(file.path(output_dir, "Curva_Coletor_Apenas_Fazenda_Bananal.png"),
+    width = 2400, height = 1800, res = 300)
+draw_collector_curve_fazenda()
+dev.off()
+
+pdf(file.path(output_dir, "Curva_Coletor_Apenas_Fazenda_Bananal.pdf"),
+    width = 10, height = 7)
+draw_collector_curve_fazenda()
+dev.off()
+
+write_csv(
+  curva_fazenda,
+  file.path(output_dir, "Curva_Coletor_Apenas_Fazenda_Bananal.csv")
+)
+
+# ------------------------------------------------------------
 # 7) Índices de biodiversidade
 # ------------------------------------------------------------
 abund_form <- dat2 %>%
