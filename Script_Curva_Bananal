@@ -37,7 +37,7 @@ file_path <- file.choose()
 # Opção B: se preferir, comente a linha acima e informe o caminho direto:
 # file_path <- "C:/Users/isali/OneDrive/Área de Trabalho/INICIAÇÃO CIENTÍFICA/Peq Mamíferos de Paraty_Dados Brutos - Pequenos_Dados Brutos.csv"
 
-output_dir <- "C:/Users/isali/OneDrive/Área de Trabalho/INICIAÇÃO CIENTÍFICA/Relatorio/Fazenda_Bananal"
+output_dir <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Relatorio/Teste_008"
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
 # -------------------------------
