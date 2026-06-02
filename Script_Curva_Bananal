@@ -45,7 +45,7 @@ cat("Arquivos serão salvos em:", output_dir, "\n")
 # ------------------------------------------------------------
 # 1) Ler dados
 # ------------------------------------------------------------
-file_path <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Pequenos_Dados Brutos.csv"
+file_path <- "D:/Temporários (Eliminar-se-ão)/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Pequenos_Dados Brutos.csv"
 
 dat <- read_csv(file_path, show_col_types = FALSE)
 names(dat) <- str_trim(names(dat))
