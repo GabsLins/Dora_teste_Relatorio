@@ -1,19 +1,8 @@
 # ============================================================
-# RELATÓRIO – Fazenda Bananal (Pequenos mamíferos)/ TESTE_008 
-# Curva do coletor por fitofisionomia (Vegetação) + área total
+# RELATÓRIO – Fazenda Bananal | Pequenos mamíferos
+# Curva do coletor geral + por fitofisionomia
 # Índices de biodiversidade + similaridade + abundância relativa
 # ============================================================
-
-# -------------------------------
-# 0) Pacotes
-# -------------------------------
-pacotes <- c(
-  "readr", "dplyr", "tidyr", "stringr", "lubridate",
-  "vegan", "ggplot2", "scales", "gridExtra", "grid"
-)
-
-instalar <- pacotes[!pacotes %in% installed.packages()[, "Package"]]
-if (length(instalar) > 0) install.packages(instalar)
 
 suppressPackageStartupMessages({
   library(readr)
@@ -28,71 +17,89 @@ suppressPackageStartupMessages({
   library(grid)
 })
 
-# -------------------------------
-# 1) Caminhos
-# -------------------------------
-# Opção A: escolha o arquivo manualmente quando o R pedir:
-file_path <- file.choose()
+# ------------------------------------------------------------
+# 0) Diretório de saída — versão segura
+# ------------------------------------------------------------
+output_dir <- "C:/Users/Administrador/Desktop/Temporarios/Dorinha/Relatorio/Teste_008"
 
-# Opção B: se preferir, comente a linha acima e informe o caminho direto:
-# file_path <- "C:/Users/isali/OneDrive/Área de Trabalho/INICIAÇÃO CIENTÍFICA/Peq Mamíferos de Paraty_Dados Brutos - Pequenos_Dados Brutos.csv"
-
-output_dir <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Relatorio/Teste_008"
-if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
-
-# -------------------------------
-# 2) Ler e checar dados
-# -------------------------------
-dat <- read_csv(file_path, show_col_types = FALSE, locale = locale(encoding = "UTF-8"))
-names(dat) <- str_squish(names(dat))
-
-cols_obrigatorias <- c("Data", "Espécie", "Vegetação")
-faltantes <- setdiff(cols_obrigatorias, names(dat))
-if (length(faltantes) > 0) {
-  stop("Colunas obrigatórias ausentes: ", paste(faltantes, collapse = ", "))
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 }
 
-# -------------------------------
-# 3) Limpeza e padronização
-# -------------------------------
+# Testa se o R consegue escrever na pasta
+teste_write <- file.path(output_dir, "teste_escrita.txt")
+
+ok_write <- tryCatch({
+  writeLines("teste", teste_write)
+  file.remove(teste_write)
+  TRUE
+}, error = function(e) FALSE)
+
+if (!ok_write) {
+  stop("O R não conseguiu escrever no diretório: ", output_dir,
+       "\nTente usar uma pasta sem acento, como C:/Temp/Teste_008, ou execute o RStudio como administrador.")
+}
+
+cat("Arquivos serão salvos em:", output_dir, "\n")
+
+# ------------------------------------------------------------
+# 1) Ler dados
+# ------------------------------------------------------------
+file_path <- "C:/Users/Administrador/Desktop/Temporários/Dorinha/Peq Mamíferos de Paraty_Dados Brutos - Pequenos_Dados Brutos.csv"
+
+dat <- read_csv(file_path, show_col_types = FALSE)
+names(dat) <- str_trim(names(dat))
+
+stopifnot(all(c("Data", "Espécie", "Vegetação") %in% names(dat)))
+
+# ------------------------------------------------------------
+# 2) Limpeza dos dados
+# ------------------------------------------------------------
 dat2 <- dat %>%
   mutate(
     Data = dmy(str_squish(as.character(Data))),
-    Especie = str_squish(as.character(`Espécie`)),
-    Vegetacao_original = str_squish(as.character(`Vegetação`)),
-    Vegetacao_norm = str_to_lower(Vegetacao_original)
+    Espécie = str_squish(as.character(`Espécie`)),
+    Vegetação = str_squish(as.character(`Vegetação`))
   ) %>%
   filter(
     !is.na(Data),
-    !is.na(Especie),
-    Especie != "",
-    !Especie %in% c("-", "NA", "N/A", "na", "n/a"),
-    !is.na(Vegetacao_original),
-    Vegetacao_original != "",
-    !Vegetacao_norm %in% c("-", "na", "n/a", "sem informação", "sem informacao")
+    !is.na(Espécie),
+    Espécie != "",
+    Espécie != "-",
+    !is.na(Vegetação),
+    Vegetação != "",
+    Vegetação != "-"
   ) %>%
   mutate(
+    Veget_norm = str_to_lower(Vegetação),
     Fitofisionomia = case_when(
-      str_detect(Vegetacao_norm, "agro") ~ "Agrofloresta",
-      str_detect(Vegetacao_norm, "alter") ~ "Floresta alterada",
-      str_detect(Vegetacao_norm, "madur") ~ "Floresta madura",
-      TRUE ~ str_to_sentence(Vegetacao_norm)
+      str_detect(Veget_norm, "agro") ~ "Agrofloresta",
+      str_detect(Veget_norm, "alter") ~ "Floresta alterada",
+      str_detect(Veget_norm, "madur") ~ "Floresta madura",
+      TRUE ~ Vegetação
     )
   )
 
-# Filtrar apenas Fazenda Bananal, caso a planilha tenha outros locais
+# Filtrar apenas Fazenda Bananal, se existir coluna Local
 if ("Local" %in% names(dat2)) {
   dat2 <- dat2 %>%
     mutate(Local_norm = str_to_lower(str_squish(as.character(Local)))) %>%
     filter(str_detect(Local_norm, "fazenda bananal"))
 }
 
-if (nrow(dat2) == 0) stop("Após a limpeza, não restaram registros para análise.")
+dat2 <- dat2 %>%
+  select(Data, Espécie, Fitofisionomia)
 
-# Datas de amostragem detectadas automaticamente na planilha
+if (nrow(dat2) == 0) {
+  stop("Após a limpeza, não restaram registros para análise.")
+}
+
+# ------------------------------------------------------------
+# 3) Datas de amostragem
+# ------------------------------------------------------------
 sampling_dates <- sort(unique(dat2$Data))
 
-# Salvar checagens
+# Checagens
 checagem_fitofisionomia <- dat2 %>%
   count(Fitofisionomia, name = "N_registros") %>%
   arrange(Fitofisionomia)
@@ -104,269 +111,212 @@ checagem_datas <- dat2 %>%
 write_csv(checagem_fitofisionomia, file.path(output_dir, "Checagem_Registros_por_Fitofisionomia.csv"))
 write_csv(checagem_datas, file.path(output_dir, "Checagem_Registros_por_Data_e_Fitofisionomia.csv"))
 
-message("Fitofisionomias encontradas:")
-print(checagem_fitofisionomia)
-
-message("Datas usadas na curva do coletor:")
-print(sampling_dates)
-
-# ============================================================
-# PARTE A) CURVA DO COLETOR
-# ============================================================
-
-# Para curva Mao Tau, o método mais adequado no vegan é "exact".
-# Se quiser a curva por randomizações, troque para "random".
-metodo_curva <- "exact"
-n_perm <- 1000
-
+# ------------------------------------------------------------
+# 4) Funções da curva do coletor
+# ------------------------------------------------------------
 make_incidence_day <- function(df, all_dates) {
-  inc <- df %>%
-    distinct(Data, Especie) %>%
+  df %>%
+    filter(Data %in% all_dates) %>%
+    distinct(Data, Espécie) %>%
     mutate(pres = 1) %>%
-    pivot_wider(names_from = Especie, values_from = pres, values_fill = 0)
-
-  base_days <- tibble(Data = all_dates)
-
-  inc_full <- base_days %>%
-    left_join(inc, by = "Data") %>%
-    arrange(Data)
-
-  inc_full[is.na(inc_full)] <- 0
-
-  out <- inc_full %>% select(-Data) %>% as.data.frame()
-
-  # Se só houver uma espécie, garantir que continue como data.frame
-  if (ncol(out) == 0) stop("Não há espécies válidas para montar a matriz de incidência.")
-  return(out)
+    pivot_wider(names_from = Espécie, values_from = pres, values_fill = 0) %>%
+    right_join(tibble(Data = all_dates), by = "Data") %>%
+    arrange(Data) %>%
+    replace(is.na(.), 0) %>%
+    select(-Data) %>%
+    as.data.frame()
 }
 
-calc_specaccum <- function(X, metodo = "exact", n_perm = 1000) {
-  if (metodo == "random") {
-    sac <- specaccum(X, method = "random", permutations = n_perm)
-  } else {
-    sac <- specaccum(X, method = "exact")
-  }
-
+mao_tau <- function(X, n_perm = 1000) {
+  sac <- vegan::specaccum(X, method = "random", permutations = n_perm)
   tibble(
     dia = seq_along(sac$sites),
-    riqueza_media = as.numeric(sac$richness),
-    sd = as.numeric(sac$sd),
-    riqueza_min = pmax(0, riqueza_media - sd),
-    riqueza_max = riqueza_media + sd
+    riqueza_media = sac$richness,
+    sd = sac$sd,
+    limite_inf = pmax(0, sac$richness - sac$sd),
+    limite_sup = sac$richness + sac$sd
   )
 }
 
-grupos_fitofisionomia <- sort(unique(dat2$Fitofisionomia))
-grupos <- c("Área total", grupos_fitofisionomia)
+# ------------------------------------------------------------
+# 5) Curvas: geral + fitofisionomias
+# ------------------------------------------------------------
+grupos <- c("Fazenda Bananal", sort(unique(dat2$Fitofisionomia)))
 
-lista_curvas <- list()
-
-for (g in grupos) {
-  df_g <- if (g == "Área total") dat2 else dat2 %>% filter(Fitofisionomia == g)
-
+curvas <- bind_rows(lapply(grupos, function(g) {
+  df_g <- if (g == "Fazenda Bananal") dat2 else filter(dat2, Fitofisionomia == g)
   X <- make_incidence_day(df_g, sampling_dates)
+  mao_tau(X, n_perm = 1000) %>% mutate(Grupo = g)
+}))
 
-  lista_curvas[[g]] <- calc_specaccum(X, metodo = metodo_curva, n_perm = n_perm) %>%
-    mutate(
-      Grupo = g,
-      Metodo = ifelse(metodo_curva == "exact", "Mao Tau/exact", "Random")
+write_csv(curvas, file.path(output_dir, "Curvas_Coletor_Geral_e_Fitofisionomias.csv"))
+
+# ------------------------------------------------------------
+# 6) Gráfico da curva do coletor
+# ------------------------------------------------------------
+cols <- c(
+  "Fazenda Bananal" = "black",
+  "Agrofloresta" = "forestgreen",
+  "Floresta alterada" = "orange3",
+  "Floresta madura" = "blue3"
+)
+
+cols <- cols[grupos]
+cols[is.na(cols)] <- "gray40"
+
+xmax <- max(curvas$dia, na.rm = TRUE)
+ymax <- max(curvas$limite_sup, na.rm = TRUE)
+
+draw_collector_curve <- function() {
+  plot(
+    NA,
+    xlim = c(1, xmax),
+    ylim = c(0, ymax),
+    xlab = "Dias de amostragem acumulados",
+    ylab = "Riqueza acumulada de espécies",
+    main = "Curva do coletor – Fazenda Bananal e fitofisionomias"
+  )
+  
+  for (g in grupos) {
+    df <- curvas %>% filter(Grupo == g)
+    cor <- cols[g]
+    
+    polygon(
+      c(df$dia, rev(df$dia)),
+      c(df$limite_inf, rev(df$limite_sup)),
+      col = adjustcolor(cor, alpha.f = 0.18),
+      border = NA
     )
+    
+    lines(df$dia, df$riqueza_media, col = cor, lwd = 3)
+  }
+  
+  legend("topleft", legend = grupos, col = cols[grupos], lwd = 3, bty = "n")
 }
 
-curvas <- bind_rows(lista_curvas)
-
-write_csv(curvas, file.path(output_dir, "Curvas_Coletor_AreaTotal_e_Fitofisionomias.csv"))
-
-p_curva <- ggplot(curvas, aes(x = dia, y = riqueza_media, color = Grupo, fill = Grupo)) +
-  geom_ribbon(aes(ymin = riqueza_min, ymax = riqueza_max), alpha = 0.18, color = NA) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2) +
-  scale_x_continuous(breaks = sort(unique(curvas$dia))) +
-  labs(
-    title = "Curva do coletor – área total e fitofisionomias",
-    subtitle = paste0("Método: ", unique(curvas$Metodo), " ± desvio-padrão"),
-    x = "Dias acumulados de amostragem",
-    y = "Riqueza acumulada de espécies",
-    color = "Grupo",
-    fill = "Grupo"
-  ) +
-  theme_bw() +
-  theme(
-    plot.title = element_text(hjust = 0.5),
-    plot.subtitle = element_text(hjust = 0.5)
-  )
-
-ggsave(file.path(output_dir, "Curva_Coletor_AreaTotal_e_Fitofisionomias.png"),
-       plot = p_curva, width = 11, height = 7, dpi = 300)
-ggsave(file.path(output_dir, "Curva_Coletor_AreaTotal_e_Fitofisionomias.pdf"),
-       plot = p_curva, width = 11, height = 7)
-
-p_curva_facetas <- ggplot(curvas, aes(x = dia, y = riqueza_media)) +
-  geom_ribbon(aes(ymin = riqueza_min, ymax = riqueza_max), alpha = 0.25) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2) +
-  facet_wrap(~ Grupo, scales = "free_y") +
-  scale_x_continuous(breaks = sort(unique(curvas$dia))) +
-  labs(
-    title = "Curva do coletor por grupo",
-    subtitle = paste0("Área total e fitofisionomias | Método: ", unique(curvas$Metodo), " ± desvio-padrão"),
-    x = "Dias acumulados de amostragem",
-    y = "Riqueza acumulada de espécies"
-  ) +
-  theme_bw() +
-  theme(
-    plot.title = element_text(hjust = 0.5),
-    plot.subtitle = element_text(hjust = 0.5)
-  )
-
-ggsave(file.path(output_dir, "Curva_Coletor_Facetas_AreaTotal_e_Fitofisionomias.png"),
-       plot = p_curva_facetas, width = 12, height = 8, dpi = 300)
-ggsave(file.path(output_dir, "Curva_Coletor_Facetas_AreaTotal_e_Fitofisionomias.pdf"),
-       plot = p_curva_facetas, width = 12, height = 8)
-
-# ============================================================
-# PARTE B) ÍNDICES DE BIODIVERSIDADE
-# Shannon, Simpson, riqueza observada e abundância total
-# ============================================================
-
-abund_form <- dat2 %>%
-  count(Fitofisionomia, Especie, name = "n") %>%
-  pivot_wider(names_from = Especie, values_from = n, values_fill = 0) %>%
-  arrange(Fitofisionomia)
-
-abund_geral <- dat2 %>%
-  count(Especie, name = "n") %>%
-  pivot_wider(names_from = Especie, values_from = n, values_fill = 0)
-
-calc_div <- function(mat, grupo) {
-  tibble(
-    Grupo = grupo,
-    Abundancia_total = rowSums(mat),
-    Riqueza_observada = specnumber(mat),
-    Shannon = diversity(mat, index = "shannon"),
-    Simpson_1_D = diversity(mat, index = "simpson"),
-    Inverso_Simpson = diversity(mat, index = "invsimpson")
-  )
-}
-
-div_geral <- calc_div(abund_geral, "Área total")
-
-div_form <- calc_div(abund_form %>% select(-Fitofisionomia), abund_form$Fitofisionomia)
-
-indices_biodiversidade <- bind_rows(div_geral, div_form) %>%
-  mutate(across(where(is.numeric), ~ round(.x, 4)))
-
-write_csv(indices_biodiversidade,
-          file.path(output_dir, "Indices_Biodiversidade_AreaTotal_e_Fitofisionomias.csv"))
-
-# Salvar tabela de índices como imagem
-png(filename = file.path(output_dir, "Tabela_Indices_Biodiversidade.png"),
-    width = 2200, height = 1000, res = 300)
-grid.newpage()
-grid.table(indices_biodiversidade)
+png(file.path(output_dir, "Curva_Coletor_Geral_e_Fitofisionomias.png"),
+    width = 2400, height = 1800, res = 300)
+draw_collector_curve()
 dev.off()
 
-# ============================================================
-# PARTE C) SIMILARIDADE ENTRE FITOFISIONOMIAS
-# Jaccard: presença/ausência
-# Bray-Curtis: abundância
-# ============================================================
+pdf(file.path(output_dir, "Curva_Coletor_Geral_e_Fitofisionomias.pdf"),
+    width = 10, height = 7)
+draw_collector_curve()
+dev.off()
 
-if (nrow(abund_form) >= 2) {
-  pa_form <- abund_form
-  pa_form[, -1] <- (pa_form[, -1] > 0) * 1
+# ------------------------------------------------------------
+# 7) Índices de biodiversidade
+# ------------------------------------------------------------
+abund_form <- dat2 %>%
+  count(Fitofisionomia, Espécie, name = "n") %>%
+  pivot_wider(names_from = Espécie, values_from = n, values_fill = 0)
 
-  dist_jacc <- vegdist(pa_form %>% select(-Fitofisionomia), method = "jaccard", binary = TRUE)
-  sim_jacc <- 1 - as.matrix(dist_jacc)
-  rownames(sim_jacc) <- pa_form$Fitofisionomia
-  colnames(sim_jacc) <- pa_form$Fitofisionomia
+abund_geral <- dat2 %>%
+  count(Espécie, name = "n") %>%
+  pivot_wider(names_from = Espécie, values_from = n, values_fill = 0)
 
-  dist_bray <- vegdist(abund_form %>% select(-Fitofisionomia), method = "bray")
-  sim_bray <- 1 - as.matrix(dist_bray)
-  rownames(sim_bray) <- abund_form$Fitofisionomia
-  colnames(sim_bray) <- abund_form$Fitofisionomia
-
-  write.csv(round(sim_jacc, 6), file.path(output_dir, "Similaridade_Jaccard_Fitofisionomias.csv"))
-  write.csv(round(sim_bray, 6), file.path(output_dir, "Similaridade_BrayCurtis_Fitofisionomias.csv"))
-
-  sim_jacc_df <- as.data.frame(round(sim_jacc, 4))
-  sim_jacc_df <- cbind(Fitofisionomia = rownames(sim_jacc_df), sim_jacc_df)
-
-  png(filename = file.path(output_dir, "Tabela_Similaridade_Jaccard.png"),
-      width = 2200, height = 1200, res = 300)
-  grid.newpage()
-  grid.table(sim_jacc_df)
-  dev.off()
-
-  sim_bray_df <- as.data.frame(round(sim_bray, 4))
-  sim_bray_df <- cbind(Fitofisionomia = rownames(sim_bray_df), sim_bray_df)
-
-  png(filename = file.path(output_dir, "Tabela_Similaridade_BrayCurtis.png"),
-      width = 2200, height = 1200, res = 300)
-  grid.newpage()
-  grid.table(sim_bray_df)
-  dev.off()
-} else {
-  warning("Há menos de duas fitofisionomias. Similaridade não foi calculada.")
+calc_metrics <- function(mat, grupo) {
+  riqueza <- specnumber(mat)
+  abundancia <- rowSums(mat)
+  shannon <- diversity(mat, index = "shannon")
+  simpson <- diversity(mat, index = "simpson")
+  pielou <- ifelse(riqueza > 1, shannon / log(riqueza), NA)
+  
+  tibble(
+    Grupo = grupo,
+    Riqueza = riqueza,
+    Abundancia = abundancia,
+    Shannon = shannon,
+    Simpson = simpson,
+    Pielou = pielou
+  )
 }
 
-# ============================================================
-# PARTE D) ABUNDÂNCIA RELATIVA POR ESPÉCIE
-# Barras empilhadas por fitofisionomia
-# ============================================================
+div_geral <- calc_metrics(abund_geral, "Fazenda Bananal")
 
+div_form <- calc_metrics(
+  abund_form %>% select(-Fitofisionomia),
+  abund_form$Fitofisionomia
+)
+
+div_all <- bind_rows(div_geral, div_form)
+
+write_csv(div_all, file.path(output_dir, "Indices_Biodiversidade.csv"))
+
+div_img <- div_all %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4)))
+
+png(file.path(output_dir, "Tabela_Indices_Biodiversidade.png"),
+    width = 2200, height = 1000, res = 300)
+grid.newpage()
+gridExtra::grid.table(div_img)
+dev.off()
+
+# ------------------------------------------------------------
+# 8) Similaridade
+# ------------------------------------------------------------
+pa_form <- abund_form
+pa_form[, -1] <- (pa_form[, -1] > 0) * 1
+
+sim_jacc <- 1 - as.matrix(
+  vegdist(select(pa_form, -Fitofisionomia), method = "jaccard", binary = TRUE)
+)
+
+rownames(sim_jacc) <- pa_form$Fitofisionomia
+colnames(sim_jacc) <- pa_form$Fitofisionomia
+
+sim_bray <- 1 - as.matrix(
+  vegdist(select(abund_form, -Fitofisionomia), method = "bray")
+)
+
+rownames(sim_bray) <- abund_form$Fitofisionomia
+colnames(sim_bray) <- abund_form$Fitofisionomia
+
+write.csv(sim_jacc, file.path(output_dir, "Similaridade_Jaccard.csv"))
+write.csv(sim_bray, file.path(output_dir, "Similaridade_BrayCurtis.csv"))
+
+# ------------------------------------------------------------
+# 9) Histograma de abundância relativa
+# ------------------------------------------------------------
 abund_sf <- dat2 %>%
-  count(Especie, Fitofisionomia, name = "n")
+  count(Espécie, Fitofisionomia, name = "n")
 
 tot_species <- abund_sf %>%
-  group_by(Especie) %>%
+  group_by(Espécie) %>%
   summarise(n_total = sum(n), .groups = "drop") %>%
   arrange(desc(n_total))
 
 grand_total <- sum(tot_species$n_total)
-if (grand_total <= 0) stop("Abundância total igual a zero.")
 
 plot_df <- abund_sf %>%
-  left_join(tot_species, by = "Especie") %>%
+  left_join(tot_species, by = "Espécie") %>%
   mutate(
-    abundancia_relativa_segmento = n / grand_total,
-    Especie = factor(Especie, levels = tot_species$Especie),
-    Fitofisionomia = factor(Fitofisionomia, levels = grupos_fitofisionomia)
+    rel_segment = n / grand_total,
+    Espécie = factor(Espécie, levels = tot_species$Espécie)
   )
 
-write_csv(plot_df,
-          file.path(output_dir, "Abundancia_Relativa_por_Especie_segmentada_por_Fitofisionomia.csv"))
-
-p_hist <- ggplot(plot_df, aes(x = Especie, y = abundancia_relativa_segmento, fill = Fitofisionomia)) +
+p_hist <- ggplot(plot_df, aes(x = Espécie, y = rel_segment, fill = Fitofisionomia)) +
   geom_col(width = 0.85) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
-    title = "Abundância relativa geral por espécie",
-    subtitle = "Barras segmentadas por fitofisionomia",
+    title = "Abundância relativa geral e por fitofisionomia",
     x = "Espécies",
     y = "Abundância relativa",
     fill = "Fitofisionomia"
   ) +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1),
-    plot.title = element_text(hjust = 0.5),
-    plot.subtitle = element_text(hjust = 0.5)
+    axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1, face = "italic"),
+    plot.title = element_text(hjust = 0.5)
   )
 
-ggsave(file.path(output_dir, "Histograma_Abundancia_Relativa_Especies.png"),
-       plot = p_hist, width = 14, height = 8, dpi = 300)
-ggsave(file.path(output_dir, "Histograma_Abundancia_Relativa_Especies.pdf"),
-       plot = p_hist, width = 14, height = 8)
+ggsave(
+  file.path(output_dir, "Histograma_Abundancia_Relativa_Especies.png"),
+  p_hist,
+  width = 14,
+  height = 8,
+  dpi = 300
+)
 
-# ============================================================
-# PARTE E) RESUMO FINAL
-# ============================================================
-
-message("✅ Análise concluída.")
-message("✅ Arquivos salvos em: ", output_dir)
-message("✅ Curvas: Curva_Coletor_AreaTotal_e_Fitofisionomias.png/pdf")
-message("✅ Curvas em facetas: Curva_Coletor_Facetas_AreaTotal_e_Fitofisionomias.png/pdf")
-message("✅ Índices: Indices_Biodiversidade_AreaTotal_e_Fitofisionomias.csv + Tabela_Indices_Biodiversidade.png")
-message("✅ Similaridades: Similaridade_Jaccard_Fitofisionomias.csv e Similaridade_BrayCurtis_Fitofisionomias.csv")
-message("✅ Abundância relativa: Histograma_Abundancia_Relativa_Especies.png/pdf")
+message("✔ Relatório finalizado.")
+message("Arquivos salvos em: ", output_dir)
