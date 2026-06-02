@@ -20,7 +20,7 @@ suppressPackageStartupMessages({
 # ------------------------------------------------------------
 # 0) Diretório de saída — versão segura
 # ------------------------------------------------------------
-output_dir <- "C:/Users/Administrador/Desktop/Temporarios/Dorinha/Relatorio/Teste_008"
+output_dir <- "D:/Temporários (Eliminar-se-ão)/Dorinha/Relatorio/Teste_008"
 
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
